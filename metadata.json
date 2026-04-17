@@ -1,0 +1,5 @@
+{
+  "name": "NOXA",
+  "description": "A conversational AI assistant powered by APP'X with natural-sounding text-to-speech and real-time waveform visualization.",
+  "requestFramePermissions": ["microphone"]
+}
