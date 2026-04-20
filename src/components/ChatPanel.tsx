@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, User, Bot, Volume2, VolumeX } from 'lucide-react';
+import { Send, User, Bot, Volume2, VolumeX, Mic } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -8,9 +8,10 @@ import { Label } from '@/components/ui/label';
 
 import { Logo } from './Logo';
 
-interface Message {
+export interface Message {
   role: 'user' | 'model';
   text: string;
+  imageUrl?: string;
 }
 
 interface ChatPanelProps {
@@ -31,13 +32,65 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   theme = 'dark',
 }) => {
   const [input, setInput] = useState('');
+  const [isListening, setIsListening] = useState(false);
+  const [browserSupportsSpeech, setBrowserSupportsSpeech] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<any>(null);
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        setBrowserSupportsSpeech(true);
+        recognitionRef.current = new SpeechRecognition();
+        recognitionRef.current.continuous = false;
+        recognitionRef.current.interimResults = false;
+
+        recognitionRef.current.onstart = () => {
+          setIsListening(true);
+        };
+
+        recognitionRef.current.onresult = (event: any) => {
+          const transcript = event.results[0][0].transcript;
+          setInput((prev) => prev ? `${prev} ${transcript}` : transcript);
+        };
+
+        recognitionRef.current.onerror = (event: any) => {
+          console.error("Speech recognition error:", event.error);
+          setIsListening(false);
+        };
+
+        recognitionRef.current.onend = () => {
+          setIsListening(false);
+        };
+      }
+    }
+
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+    };
+  }, []);
+
+  const toggleListening = () => {
+    if (!recognitionRef.current) return;
+    if (isListening) {
+      recognitionRef.current.stop();
+    } else {
+      try {
+        recognitionRef.current.start();
+      } catch (err) {
+        console.error("Failed to start speech recognition:", err);
+      }
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,6 +144,16 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                   {m.role === 'user' ? 'You' : 'NOXA'}
                 </div>
                 {m.text}
+                {m.imageUrl && (
+                  <div className="mt-2 text-center">
+                    <img 
+                      src={m.imageUrl} 
+                      alt="AI generated" 
+                      className="rounded-lg max-w-full h-auto mt-2" 
+                      referrerPolicy="no-referrer"
+                    />
+                  </div>
+                )}
               </div>
             </div>
           ))}
@@ -106,10 +169,22 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       </ScrollArea>
 
       <form onSubmit={handleSubmit} className={`p-4 ${theme === 'dark' ? 'bg-zinc-900/60 border-zinc-800' : 'bg-zinc-50/50 border-zinc-100'} border-t flex gap-2`}>
+        {browserSupportsSpeech && (
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            onClick={toggleListening}
+            className={`${isListening ? 'text-red-500 bg-red-500/10' : theme === 'dark' ? 'text-zinc-400 hover:text-white' : 'text-zinc-500 hover:text-zinc-900'} shrink-0 rounded-full`}
+            title={isListening ? "Stop listening" : "Start voice input"}
+          >
+            <Mic size={18} className={isListening ? "animate-pulse" : ""} />
+          </Button>
+        )}
         <Input 
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Type a message..."
+          placeholder={isListening ? "Listening..." : "Type a message..."}
           className={`${theme === 'dark' ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-white border-zinc-200 text-zinc-900'} focus-visible:ring-indigo-500`}
           disabled={isGenerating}
         />
@@ -117,7 +192,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
           type="submit" 
           size="icon" 
           disabled={!input.trim() || isGenerating}
-          className={`${theme === 'dark' ? 'bg-white hover:bg-zinc-200 text-zinc-950' : 'bg-indigo-600 hover:bg-indigo-500 text-white'} shrink-0`}
+          className={`${theme === 'dark' ? 'bg-white hover:bg-zinc-200 text-zinc-950' : 'bg-indigo-600 hover:bg-indigo-500 text-white'} shrink-0 rounded-full`}
         >
           <Send size={18} />
         </Button>
