@@ -28,6 +28,7 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({ onTranscript }) => {
       rec.onerror = (event: any) => {
         console.error('Speech recognition error', event.error);
         setIsListening(false);
+        if (event.error === 'aborted' || event.error === 'no-speech') return;
         toast.error('Speech recognition failed');
       };
 

@@ -1,0 +1,74 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // --- User Validation ---
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'createdAt']) &&
+             data.keys().size() >= 2 &&
+             data.uid == request.auth.uid &&
+             data.uid is string &&
+             (data.get('displayName', '') is string && data.get('displayName', '').size() <= 100) &&
+             (data.get('email', '') is string && data.get('email', '').size() <= 100) &&
+             (data.get('phoneNumber', '') is string && data.get('phoneNumber', '').size() <= 20) &&
+             (data.get('photoURL', '') is string && data.get('photoURL', '').size() <= 500) &&
+             data.createdAt is timestamp;
+    }
+
+    // --- Collections ---
+    match /users/{userId} {
+      // Rule 3: Hardened Path Variables
+      allow get: if isOwner(userId) && isValidId(userId);
+      
+      // Rule 8: Secure List Queries (Users can only list themselves)
+      allow list: if isOwner(userId);
+
+      allow create: if isOwner(userId) && 
+        isValidId(userId) && 
+        isValidUser(incoming()) && 
+        incoming().createdAt == request.time;
+
+      allow update: if isOwner(userId) && 
+        isValidId(userId) &&
+        isValidUser(incoming()) && (
+          // Ensure immutability of core identity fields
+          incoming().uid == existing().uid &&
+          incoming().createdAt == existing().createdAt &&
+          // Action: Profile Update
+          incoming().diff(existing()).affectedKeys().hasAny(['displayName', 'photoURL', 'email', 'phoneNumber'])
+        );
+        
+      allow delete: if isOwner(userId) && isValidId(userId);
+    }
+    
+    // --- Connection Test Path ---
+    match /test/connection {
+      allow read: if isSignedIn();
+    }
+  }
+}
