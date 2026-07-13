@@ -14,7 +14,7 @@ View your app in Appx project: https:NOXA by appx
 
 
 1. Install dependencies:
-   `npm install`
+   `Noxa install`
 2. Set the `Your_API_KEY` in [.env.local](.env.local) to your API key
 3. Run the app:
    `By appx`
